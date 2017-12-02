@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Alarm App</string>
+    <string name="AbsDiff_val">AbsDiff: %.4f</string>
+    <string name="moving_diff_avg_val">MovingDiffAverage: %.4f</string>
+</resources>
