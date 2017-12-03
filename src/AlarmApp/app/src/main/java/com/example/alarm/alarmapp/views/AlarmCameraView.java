@@ -35,6 +35,11 @@ public class AlarmCameraView extends JavaCameraView {
     }
 
     @Override
+    protected boolean initializeCamera(int width, int height) {
+        return super.initializeCamera(width, height);
+    }
+
+    @Override
     public void onPreviewFrame(byte[] frame, Camera arg1) {
         if (!mAreCameraParamsSet) {
             mAreCameraParamsSet = true;

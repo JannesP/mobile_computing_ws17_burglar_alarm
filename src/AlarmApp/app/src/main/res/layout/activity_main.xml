@@ -28,27 +28,63 @@
         android:layout_width="200dp"
         android:layout_height="0dp"
         android:layout_marginBottom="8dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginRight="8dp"
         android:layout_marginTop="8dp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginEnd="8dp">
+
+        <TextView
+            android:id="@+id/tvState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/idle"/>
 
         <TextView
             android:id="@+id/tvMovingDiffAvg"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="tvMovingDiffAvg:"
-            app:layout_constraintStart_toStartOf="@+id/tvAbsDiff"
-            app:layout_constraintTop_toBottomOf="@+id/tvAbsDiff"/>
+            android:text="@string/moving_diff_avg_val"/>
 
         <TextView
             android:id="@+id/tvAbsDiff"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="tvAbsDiff"
-            app:layout_constraintStart_toEndOf="@+id/cameraView"
-            app:layout_constraintTop_toTopOf="parent"/>
+            android:text="@string/AbsDiff_val"/>
+
+        <TextView
+            android:id="@+id/tvMaxDiff"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/max_diff_val"/>
+
+        <TextView
+            android:id="@+id/tvAlarmTriggered"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/alarm_triggered_val"/>
+
+        <Switch
+            android:id="@+id/swAlarmSound"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="false"
+            android:text="Sound"/>
+
+        <Button
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:id="@+id/btnClear"
+            android:text="@string/clear"/>
+
+        <ToggleButton
+            android:id="@+id/tbtnStartStop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ToggleButton"/>
+
+
     </LinearLayout>
 </android.support.constraint.ConstraintLayout>
