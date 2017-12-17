@@ -35,10 +35,11 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
     private State mState = State.IDLE;
     private IAlarmCameraListener mAlarmListener = null;
     private Mat mLastMat = null;
+    private Mat mEmptyGrayMap = null;
 
-    private volatile double mMovingAbsDiffAvg = -1d;
-    private volatile double mMovingDiffAvg = -1d;
-    private volatile double mMaxDiff = 0;
+    private double mMovingAbsDiffAvg = -1d;
+    private double mMovingDiffAvg = -1d;
+    private double mMaxDiff = 0;
 
     public AlarmCameraView(Context context, int cameraId) {
         super(context, cameraId);
@@ -122,17 +123,20 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
 
     @Override
     public void onCameraViewStarted(int width, int height) {
-
+        mEmptyGrayMap = new Mat(height, width, CvType.CV_8UC1);
     }
 
     @Override
     public void onCameraViewStopped() {
-
+        if (mEmptyGrayMap != null) mEmptyGrayMap.release();
+        mEmptyGrayMap = null;
+        if (mLastMat != null) mLastMat.release();
+        mLastMat = null;
     }
 
     @Override
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
-        Mat screenMat = inputFrame.gray();
+        Mat screenMat = inputFrame.rgba();
 
         if (mState == State.RUNNING || mState == State.CALIBRATING) {
             mLastProcessFrameTime = System.currentTimeMillis();
@@ -146,8 +150,10 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
             }
 
             if (mLastMat != null) {
-                Mat diff = new Mat(screenMat.size(), screenMat.type());
-                Core.absdiff(screenMat, mLastMat, diff);
+                //calculate trigger values
+                Mat grayMat = inputFrame.gray();
+                Mat diff = new Mat(grayMat.size(), grayMat.type());
+                Core.absdiff(grayMat, mLastMat, diff);
                 final double diffD = Core.mean(diff).val[0];
                 if (mMovingAbsDiffAvg == -1d) mMovingAbsDiffAvg = diffD;
                 else {
@@ -166,22 +172,41 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
                 if (alarmTriggered) Log.d(TAG, "Alarm Triggered: " + new Date().toGMTString());
 
                 Log.v(TAG,
-                        String.format("onProcessedFrame:\t%s\t%s\t%s\t%s\t%s",
-                            String.format(getContext().getString(R.string.curr_alarm_threshold_val), absCurrAlarmThreshold),
-                            String.format(getContext().getString(R.string.moving_diff_abs_avg_val), mMovingAbsDiffAvg),
-                            String.format(getContext().getString(R.string.moving_diff_avg_val), mMovingDiffAvg),
-                            String.format(getContext().getString(R.string.max_diff_val), mMaxDiff),
-                            String.format(getContext().getString(R.string.AbsDiff_val), diffD)
-                        )
+                    String.format("onProcessedFrame:\t%s\t%s\t%s\t%s\t%s",
+                        String.format(getContext().getString(R.string.curr_alarm_threshold_val), absCurrAlarmThreshold),
+                        String.format(getContext().getString(R.string.moving_diff_abs_avg_val), mMovingAbsDiffAvg),
+                        String.format(getContext().getString(R.string.moving_diff_avg_val), mMovingDiffAvg),
+                        String.format(getContext().getString(R.string.max_diff_val), mMaxDiff),
+                        String.format(getContext().getString(R.string.AbsDiff_val), diffD)
+                    )
                 );
-
                 if (alarmTriggered && mState == State.RUNNING) onAlarmInternal();
 
+                //draw changes on screenMat
+                ArrayList<Mat> mergeMats = new ArrayList<>(3);
+                mergeMats.add(diff);
+                mergeMats.add(mEmptyGrayMap);
+                mergeMats.add(mEmptyGrayMap);
+
+                //create buffer for red diff (rgb mat)
+                Mat matRedDiff = new Mat(diff.size(), screenMat.type());
+                //merge two empty single channel mats and the diff mat as different channels into rgb mat
+                Core.merge(mergeMats, matRedDiff);
+                //create buffer for gray image in rgb mat
+                Mat grayRgbMat = new Mat(screenMat.size(), screenMat.type());
+                //convert gray single channel mat to rgb mat
+                Imgproc.cvtColor(grayMat, grayRgbMat, Imgproc.COLOR_GRAY2RGB);
+                //add the gray and red overlay together
+                Core.add(grayRgbMat, matRedDiff, screenMat);
+
                 //release resources
+                grayRgbMat.release();
+                grayMat.release();
+                matRedDiff.release();
                 diff.release();
                 mLastMat.release();
             }
-            mLastMat = screenMat;
+            mLastMat = inputFrame.gray();
         }
         return screenMat;
     }
