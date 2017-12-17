@@ -1,8 +1,14 @@
 package com.example.alarm.alarmapp;
 
+import android.Manifest;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -26,41 +32,65 @@ import org.opencv.core.Mat;
 
 import java.util.Date;
 
-public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2, Handler.Callback, View.OnClickListener, CompoundButton.OnCheckedChangeListener {
+public class MainActivity extends AppCompatActivity implements Handler.Callback, View.OnClickListener, CompoundButton.OnCheckedChangeListener, AlarmCameraView.IAlarmCameraListener {
     private static final String TAG = "MainActivity";
 
     private static final int TIMEOUT_START = 10000;
-    private static final int TIMEOUT_CALIBRATE = 10000;
-    private static final double ALARM_THRESHHOLD_FACTOR = 1.3;
-    private static final int FRAME_DIVIDER = 8;
-    private static final double AVERAGE_OVER = 100d / FRAME_DIVIDER;
 
     private AlarmCameraView mCameraView;
     private Button mBtnClear;
     private ToggleButton mTbtnStartStop;
     private Switch mSwSound;
-    private TextView mTvAbsDiff, mTvMovingDiffAvg, mTvMaxDiff, mTvAlarmTriggered, mTvState;
+    private TextView mTvAlarmTriggered, mTvState;
+    private boolean mHasPermission = false;
 
     private MediaPlayer mAlarmPlayer;
     private Handler mUiHandler;
 
     private State mState = State.IDLE;
-    private Mat mLastMat = null;
-    private volatile double mMovingDiffAvg = -1d;
-    private volatile double mMaxDiff = 0;
-    private volatile int mFrameNumber = 0;
+
+    @Override
+    public void onAlarm() {
+        Log.d(TAG, "onAlarm()");
+        onCommand(Command.ALARM);
+    }
+
+    @Override
+    public void onCalibrating() {
+        Log.d(TAG, "onCalibrating()");
+        onCommand(Command.CALIBRATING);
+    }
+
+    @Override
+    public void onRun() {
+        Log.d(TAG, "onRun()");
+        onCommand(Command.RUNNING);
+    }
+
+    @Override
+    public Handler getHandler() {
+        return mUiHandler;
+    }
 
     private enum State {
         IDLE, WAITING_TO_START, CALIBRATING, RUNNING
     }
 
     private enum Command {
-        BUTTON_START_STOP, START_TIMER, ALARM, CALIBRATE_TIMER
+        BUTTON_START_STOP, START_TIMER, ALARM, CALIBRATING, RUNNING
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        mHasPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
+        if (!mHasPermission) {
+            setContentView(R.layout.activity_main_permission_missing);
+            ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.CAMERA}, 0);
+            return;
+        }
+
         setContentView(R.layout.activity_main);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -69,9 +99,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         mAlarmPlayer = MediaPlayer.create(this, R.raw.sound_alarm);
 
         mCameraView = findViewById(R.id.cameraView);
-        mTvAbsDiff = findViewById(R.id.tvAbsDiff);
-        mTvMovingDiffAvg = findViewById(R.id.tvMovingDiffAvg);
-        mTvMaxDiff = findViewById(R.id.tvMaxDiff);
         mTvAlarmTriggered = findViewById(R.id.tvAlarmTriggered);
         mTvState = findViewById(R.id.tvState);
         mBtnClear = findViewById(R.id.btnClear);
@@ -82,7 +109,20 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         mBtnClear.setOnClickListener(this);
 
         mCameraView.setVisibility(SurfaceView.VISIBLE);
-        mCameraView.setCvCameraViewListener(this);
+        mCameraView.setAlarmListener(this);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        switch (requestCode) {
+            case 0:
+                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Intent newActivity = new Intent(this, MainActivity.class);
+                    startActivity(newActivity);
+                    finish();
+                }
+                break;
+        }
     }
 
     private void onCommand(Command cmd) {
@@ -101,9 +141,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             case WAITING_TO_START:
                 switch (cmd) {
                     case START_TIMER:
-                        mState = State.CALIBRATING;
-                        mUiHandler.postDelayed(() -> onCommand(Command.CALIBRATE_TIMER), TIMEOUT_CALIBRATE);
+                        mCameraView.startAlarm();
                         mTbtnStartStop.setEnabled(true);
+                        break;
+                    case CALIBRATING:
+                        mState = State.CALIBRATING;
                         break;
                     default:
                     Log.e(TAG, "invalid command in " + mState + ": " + cmd);
@@ -111,11 +153,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 break;
             case CALIBRATING:
                 switch (cmd) {
-                    case CALIBRATE_TIMER:
-                        mState = State.RUNNING;
-                        break;
                     case BUTTON_START_STOP:
                         mState = State.IDLE;
+                        break;
+                    case RUNNING:
+                        mState = State.RUNNING;
                         break;
                     default:
                         Log.e(TAG, "invalid command in " + mState + ": " + cmd);
@@ -128,6 +170,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                         break;
                     case ALARM:
                         if(mSwSound.isChecked()) playAlarmSound();
+                        mTvAlarmTriggered.setText("ALAAAAAARM!");
                         break;
                     default:
                         Log.e(TAG, "invalid command in " + mState + ": " + cmd);
@@ -144,12 +187,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     protected void onResume() {
         super.onResume();
-        if (!OpenCVLoader.initDebug()) {
-            Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_2, this, mLoaderCallback);
-        } else {
-            Log.d(TAG, "OpenCV library found inside package. Using it!");
-            mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+        if (mHasPermission) {
+            if (!OpenCVLoader.initDebug()) {
+                Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
+                OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_2, this, mLoaderCallback);
+            } else {
+                Log.d(TAG, "OpenCV library found inside package. Using it!");
+                mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+            }
         }
     }
 
@@ -161,17 +206,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     protected void onPause() {
         super.onPause();
-        if (mCameraView != null) mCameraView.disableView();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
+        if (mHasPermission) {
+            if (mCameraView != null) mCameraView.disableView();
+        }
     }
 
     //endregion
@@ -202,53 +239,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     };
 
     @Override
-    public void onCameraViewStarted(int width, int height) {
-        Log.i(TAG, "onCameraViewStarted()");
-
-    }
-
-    @Override
-    public void onCameraViewStopped() {
-        Log.i(TAG, "onCameraViewStopped()");
-    }
-
-    @Override
-    public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        Mat currMat = inputFrame.gray();
-
-        mFrameNumber = (mFrameNumber++) % FRAME_DIVIDER;
-        if (mFrameNumber == 0 && (mState == State.RUNNING || mState == State.CALIBRATING)){
-            if (mLastMat != null) {
-                Mat diff = new Mat(currMat.size(), currMat.type());
-                Core.absdiff(currMat, mLastMat, diff);
-                final double diffD = Core.mean(diff).val[0];
-                if (mMovingDiffAvg == -1d) mMovingDiffAvg = diffD;
-                else {
-                    mMovingDiffAvg = (mMovingDiffAvg * (AVERAGE_OVER - 1) + diffD) / AVERAGE_OVER;
-                }
-                if (mMaxDiff < diffD) {
-                    mMaxDiff = diffD;
-                }
-                final boolean alarmTriggered = diffD > (mMovingDiffAvg * ALARM_THRESHHOLD_FACTOR);
-                if (alarmTriggered) Log.d(TAG, "Alarm Triggered: " + new Date().toGMTString());
-                mUiHandler.post(() -> {
-                    mTvAbsDiff.setText(String.format(getString(R.string.AbsDiff_val), diffD));
-                    mTvMovingDiffAvg.setText(String.format(getString(R.string.moving_diff_avg_val), mMovingDiffAvg));
-                    mTvMaxDiff.setText(String.format(getString(R.string.max_diff_val), mMaxDiff));
-                    if (alarmTriggered && mState == State.RUNNING) onCommand(Command.ALARM);
-                    mTvAlarmTriggered.setText(String.format(getString(R.string.alarm_triggered_val), alarmTriggered));
-                });
-                //release resources
-                mLastMat.release();
-            }
-
-
-            mLastMat = currMat;
-        }
-        return currMat;
-    }
-
-    @Override
     public boolean handleMessage(Message msg) {
         return false;
     }
@@ -257,8 +247,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     public void onClick(View v) {
         switch (v.getId()) {
             case R.id.btnClear:
-                mMovingDiffAvg = 0;
-                mMaxDiff = 0;
+                mCameraView.stopAlarm();
+                mTvAlarmTriggered.setText("false");
                 break;
         }
     }

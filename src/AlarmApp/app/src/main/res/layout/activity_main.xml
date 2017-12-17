@@ -43,24 +43,6 @@
             android:text="@string/idle"/>
 
         <TextView
-            android:id="@+id/tvMovingDiffAvg"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/moving_diff_avg_val"/>
-
-        <TextView
-            android:id="@+id/tvAbsDiff"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/AbsDiff_val"/>
-
-        <TextView
-            android:id="@+id/tvMaxDiff"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/max_diff_val"/>
-
-        <TextView
             android:id="@+id/tvAlarmTriggered"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

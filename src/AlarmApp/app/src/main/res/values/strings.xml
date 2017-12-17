@@ -7,4 +7,6 @@
     <string name="clear">Clear</string>
     <string name="idle">IDLE</string>
     <string name="state_val">State: %s</string>
+    <string name="moving_diff_abs_avg_val">MovingAbsDiffAverage: %.4f</string>
+    <string name="curr_alarm_threshold_val">CurrAlarmThreshold: %.4f</string>
 </resources>
