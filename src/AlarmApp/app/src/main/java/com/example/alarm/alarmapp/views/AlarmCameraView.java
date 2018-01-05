@@ -6,7 +6,6 @@ import android.os.Handler;
 import android.util.AttributeSet;
 import android.util.Log;
 
-import com.example.alarm.alarmapp.MainActivity;
 import com.example.alarm.alarmapp.R;
 
 import org.opencv.android.CameraBridgeViewBase;
@@ -18,18 +17,19 @@ import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 
+/**
+ * A camera view that has a movement detection.
+ */
 public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewBase.CvCameraViewListener2 {
     private static final String TAG = AlarmCameraView.class.getName();
 
     private int mTimeToCalibrate = 10000;
-    private double mAlarmThreshhold = 8d;
+    private double mAlarmThreshold = 6d;
     private int mProcessFps = 4;
     private double mAverageOver = 100d / mProcessFps;
 
     private long mCalibratingStartedAt = 0;
-    private long mLastProcessFrameTime = 0;
 
     private boolean mAreCameraParamsSet = false;
     private State mState = State.IDLE;
@@ -90,8 +90,6 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
 
     public void stopAlarm() {
         mCalibratingStartedAt = 0;
-        mLastProcessFrameTime = 0;
-
         mMovingAbsDiffAvg = -1;
         mMaxDiff = 0;
 
@@ -104,10 +102,6 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
 
     public void removeAlarmListener() {
         this.mAlarmListener = null;
-    }
-
-    private long getProcessTimeoutMs() {
-        return 1000 / mProcessFps;
     }
 
     @Override
@@ -139,9 +133,8 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
         Mat screenMat = inputFrame.rgba();
 
         if (mState == State.RUNNING || mState == State.CALIBRATING) {
-            mLastProcessFrameTime = System.currentTimeMillis();
-
             if (mState == State.CALIBRATING) {
+
                 if (System.currentTimeMillis() - mCalibratingStartedAt >= mTimeToCalibrate) {
                     mState = State.RUNNING;
                     onRunInternal();
@@ -167,7 +160,7 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
                 if (mMaxDiff < diffD) {
                     mMaxDiff = diffD;
                 }
-                double absCurrAlarmThreshold = (mMovingDiffAvg * mAlarmThreshhold) + mMovingAbsDiffAvg;
+                double absCurrAlarmThreshold = (mMovingDiffAvg * mAlarmThreshold) + mMovingAbsDiffAvg;
                 boolean alarmTriggered = diffD > absCurrAlarmThreshold;
                 if (alarmTriggered) Log.d(TAG, "Alarm Triggered: " + new Date().toGMTString());
 

@@ -55,12 +55,6 @@
             android:checked="false"
             android:text="Sound"/>
 
-        <Button
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:id="@+id/btnClear"
-            android:text="@string/clear"/>
-
         <ToggleButton
             android:id="@+id/tbtnStartStop"
             android:layout_width="match_parent"

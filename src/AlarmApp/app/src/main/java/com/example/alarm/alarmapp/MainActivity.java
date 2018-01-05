@@ -4,19 +4,18 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.MediaPlayer;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.ToggleButton;
@@ -24,25 +23,24 @@ import android.widget.ToggleButton;
 import com.example.alarm.alarmapp.views.AlarmCameraView;
 
 import org.opencv.android.BaseLoaderCallback;
-import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.Core;
-import org.opencv.core.Mat;
 
-import java.util.Date;
-
-public class MainActivity extends AppCompatActivity implements Handler.Callback, View.OnClickListener, CompoundButton.OnCheckedChangeListener, AlarmCameraView.IAlarmCameraListener {
+/**
+ * This is the MainActivity. It handles all the ui related stuff like buttons and controls the AlarmCameraView.
+ */
+public class MainActivity extends AppCompatActivity implements Handler.Callback, View.OnClickListener, AlarmCameraView.IAlarmCameraListener {
     private static final String TAG = "MainActivity";
 
     private static final int TIMEOUT_START = 10000;
 
     private AlarmCameraView mCameraView;
-    private Button mBtnClear;
     private ToggleButton mTbtnStartStop;
     private Switch mSwSound;
     private TextView mTvAlarmTriggered, mTvState;
     private boolean mHasPermission = false;
+
+    private Runnable mRunnableStartTimer = () -> onCommand(Command.START_TIMER);
 
     private MediaPlayer mAlarmPlayer;
     private Handler mUiHandler;
@@ -77,18 +75,19 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
     }
 
     private enum Command {
-        BUTTON_START_STOP, START_TIMER, ALARM, CALIBRATING, RUNNING
+        BUTTON_START_STOP, START_TIMER, ALARM, CALIBRATING, RUNNING, ON_PAUSE, RESET_ALARM_TEXT
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        //check for camera permission, if it is not granted invoke a layout that displays an error
         mHasPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
         if (!mHasPermission) {
             setContentView(R.layout.activity_main_permission_missing);
             ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.CAMERA}, 0);
-            return;
+            return; //cancel remaining init. To start the real app we need permission from the start.
         }
 
         setContentView(R.layout.activity_main);
@@ -101,12 +100,10 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
         mCameraView = findViewById(R.id.cameraView);
         mTvAlarmTriggered = findViewById(R.id.tvAlarmTriggered);
         mTvState = findViewById(R.id.tvState);
-        mBtnClear = findViewById(R.id.btnClear);
         mSwSound = findViewById(R.id.swAlarmSound);
         mTbtnStartStop = findViewById(R.id.tbtnStartStop);
 
-        mTbtnStartStop.setOnCheckedChangeListener(this);
-        mBtnClear.setOnClickListener(this);
+        mTbtnStartStop.setOnClickListener(this);
 
         mCameraView.setVisibility(SurfaceView.VISIBLE);
         mCameraView.setAlarmListener(this);
@@ -116,6 +113,7 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         switch (requestCode) {
             case 0:
+                //restart app if we got the permission
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     Intent newActivity = new Intent(this, MainActivity.class);
                     startActivity(newActivity);
@@ -126,13 +124,14 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
     }
 
     private void onCommand(Command cmd) {
+        Log.d(TAG, "Command: " + cmd.toString() + " received in state: " + mState.toString());
+        if (cmd == Command.RESET_ALARM_TEXT) mTvAlarmTriggered.setText("false");
         switch (mState) {
             case IDLE:
                 switch (cmd) {
                     case BUTTON_START_STOP:
-                        mTbtnStartStop.setEnabled(false);
                         mState = State.WAITING_TO_START;
-                        mUiHandler.postDelayed(() -> onCommand(Command.START_TIMER), TIMEOUT_START);
+                        mUiHandler.postDelayed(mRunnableStartTimer, TIMEOUT_START);
                         break;
                     default:
                         Log.e(TAG, "invalid command in " + mState + ": " + cmd);
@@ -142,10 +141,17 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
                 switch (cmd) {
                     case START_TIMER:
                         mCameraView.startAlarm();
-                        mTbtnStartStop.setEnabled(true);
                         break;
                     case CALIBRATING:
                         mState = State.CALIBRATING;
+                        break;
+                    case BUTTON_START_STOP:
+                        mState = State.IDLE;
+                        mUiHandler.removeCallbacks(mRunnableStartTimer);
+                        break;
+                    case ON_PAUSE:
+                        mState = State.IDLE;
+                        mUiHandler.removeCallbacks(mRunnableStartTimer);
                         break;
                     default:
                     Log.e(TAG, "invalid command in " + mState + ": " + cmd);
@@ -154,7 +160,9 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
             case CALIBRATING:
                 switch (cmd) {
                     case BUTTON_START_STOP:
+                    case ON_PAUSE:
                         mState = State.IDLE;
+                        mCameraView.stopAlarm();
                         break;
                     case RUNNING:
                         mState = State.RUNNING;
@@ -166,11 +174,14 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
             case RUNNING:
                 switch (cmd) {
                     case BUTTON_START_STOP:
+                    case ON_PAUSE:
                         mState = State.IDLE;
+                        mCameraView.stopAlarm();
                         break;
                     case ALARM:
                         if(mSwSound.isChecked()) playAlarmSound();
                         mTvAlarmTriggered.setText("ALAAAAAARM!");
+                        mUiHandler.postDelayed(() -> onCommand(Command.RESET_ALARM_TEXT), 2000);
                         break;
                     default:
                         Log.e(TAG, "invalid command in " + mState + ": " + cmd);
@@ -179,7 +190,10 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
             default:
                 Log.e(TAG, "State " + mState + " not implemented.");
         }
+        Log.d(TAG, "State after command execution: " + mState.toString());
         mTvState.setText(String.format(getString(R.string.state_val), mState.toString()));
+        //set start stop button to correct rendering for the current state
+        mTbtnStartStop.setChecked(mState == State.RUNNING || mState == State.CALIBRATING || mState == State.WAITING_TO_START);
     }
 
     //region lifecycle
@@ -207,7 +221,10 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
     protected void onPause() {
         super.onPause();
         if (mHasPermission) {
-            if (mCameraView != null) mCameraView.disableView();
+            if (mCameraView != null) {
+                mCameraView.disableView();
+                onCommand(Command.ON_PAUSE);
+            }
         }
     }
 
@@ -246,16 +263,6 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
     @Override
     public void onClick(View v) {
         switch (v.getId()) {
-            case R.id.btnClear:
-                mCameraView.stopAlarm();
-                mTvAlarmTriggered.setText("false");
-                break;
-        }
-    }
-
-    @Override
-    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-        switch (buttonView.getId()) {
             case R.id.tbtnStartStop:
                 onCommand(Command.BUTTON_START_STOP);
                 break;
