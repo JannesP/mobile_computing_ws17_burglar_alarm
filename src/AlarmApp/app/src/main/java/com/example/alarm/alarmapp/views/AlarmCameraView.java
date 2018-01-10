@@ -60,17 +60,32 @@ public class AlarmCameraView extends JavaCameraView implements CameraBridgeViewB
 
     private void onAlarmInternal() {
         Log.d(TAG, "onAlarmInternal");
-        if (mAlarmListener != null) mAlarmListener.getHandler().post(() -> mAlarmListener.onAlarm());
+        if (mAlarmListener != null) mAlarmListener.getHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                mAlarmListener.onAlarm();
+            }
+        });
     }
 
     private void onCalibratingInternal() {
         Log.d(TAG, "onCalibratingInternal");
-        if (mAlarmListener != null) mAlarmListener.getHandler().post(() -> mAlarmListener.onCalibrating());
+        if (mAlarmListener != null) mAlarmListener.getHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                mAlarmListener.onCalibrating();
+            }
+        });
     }
 
     private void onRunInternal() {
         Log.d(TAG, "onRunInternal");
-        if (mAlarmListener != null) mAlarmListener.getHandler().post(() -> mAlarmListener.onRun());
+        if (mAlarmListener != null) mAlarmListener.getHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                mAlarmListener.onRun();
+            }
+        });
     }
 
     public enum State {

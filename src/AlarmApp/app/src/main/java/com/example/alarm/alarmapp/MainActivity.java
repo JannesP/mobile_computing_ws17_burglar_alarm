@@ -40,7 +40,12 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
     private TextView mTvAlarmTriggered, mTvState;
     private boolean mHasPermission = false;
 
-    private Runnable mRunnableStartTimer = () -> onCommand(Command.START_TIMER);
+    private Runnable mRunnableStartTimer = new Runnable() {
+        @Override
+        public void run() {
+            onCommand(Command.START_TIMER);
+        }
+    };
 
     private MediaPlayer mAlarmPlayer;
     private Handler mUiHandler;
@@ -97,11 +102,11 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
         mUiHandler = new Handler(this);
         mAlarmPlayer = MediaPlayer.create(this, R.raw.sound_alarm);
 
-        mCameraView = findViewById(R.id.cameraView);
-        mTvAlarmTriggered = findViewById(R.id.tvAlarmTriggered);
-        mTvState = findViewById(R.id.tvState);
-        mSwSound = findViewById(R.id.swAlarmSound);
-        mTbtnStartStop = findViewById(R.id.tbtnStartStop);
+        mCameraView = (AlarmCameraView) findViewById(R.id.cameraView);
+        mTvAlarmTriggered = (TextView) findViewById(R.id.tvAlarmTriggered);
+        mTvState = (TextView) findViewById(R.id.tvState);
+        mSwSound = (Switch) findViewById(R.id.swAlarmSound);
+        mTbtnStartStop = (ToggleButton) findViewById(R.id.tbtnStartStop);
 
         mTbtnStartStop.setOnClickListener(this);
 
@@ -181,7 +186,13 @@ public class MainActivity extends AppCompatActivity implements Handler.Callback,
                     case ALARM:
                         if(mSwSound.isChecked()) playAlarmSound();
                         mTvAlarmTriggered.setText("ALAAAAAARM!");
-                        mUiHandler.postDelayed(() -> onCommand(Command.RESET_ALARM_TEXT), 2000);
+                        mUiHandler.postDelayed(new Runnable() {
+
+                            @Override
+                            public void run() {
+                                MainActivity.this.onCommand(Command.RESET_ALARM_TEXT);
+                            }
+                        }, 2000);
                         break;
                     default:
                         Log.e(TAG, "invalid command in " + mState + ": " + cmd);
